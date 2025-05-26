@@ -1,7 +1,3 @@
-//
-// Created by Lucas Natario on 26/05/2025.
-//
-
 #ifndef SEMAPHORES_H
 #define SEMAPHORES_H
 
