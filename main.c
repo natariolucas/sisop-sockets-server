@@ -7,28 +7,15 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <sys/types.h>
 #include "semaphores.h"
-
-typedef struct {
-    int acceptedSocketFD;
-    struct sockaddr_in address;
-    bool acceptedSuccessfully;
-    int error;
-} AcceptedSocket;
-
-/* Socket */
-int createIPv4Socket();
-struct sockaddr_in* createIPv4Address(char* ip, int port);
-AcceptedSocket * acceptIncomingConnection(int serverSocketFD);
-void startAcceptingIncomingConnections(int serverSocketFD, int semaphoreID);
-void acceptConnectionsAndProcessRequests(int serverSocketFD);
-void* processSocketRequests(void* args);
+#include "server_socket.h"
 
 #define LISTEN_BACKLOG 128
 #define MAX_CONNECTIONS 5
 #define PORT 2000
 #define IP ""
+
+void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore);
 
 int main() {
     printf("[+] starting with IP: '%s' and PORT: %d\n", IP, PORT);
@@ -68,7 +55,7 @@ int main() {
 
     int semaphoreConnectionsID = createSemaphore(MAX_CONNECTIONS);
 
-    startAcceptingIncomingConnections(serverSocketFD, semaphoreConnectionsID);
+    startAcceptingIncomingConnections(serverSocketFD, semaphoreConnectionsID, processSocketRequests);
 
     printf("[!] shutting down....");
     shutdown(serverSocketFD, SHUT_RDWR);
@@ -76,80 +63,8 @@ int main() {
     return 0;
 }
 
-int createIPv4Socket() {
-    /*
-     * AF_INET = IPv4
-     * SOCK_STREAM = TCP Protocol
-     * 0 = Choose protocol based on two previous params
-     */
-    return socket(AF_INET, SOCK_STREAM, 0);
-}
-
-struct sockaddr_in* createIPv4Address(char *ip, int port) {
-    struct sockaddr_in* address = malloc(sizeof(struct sockaddr_in));
-    address->sin_family = AF_INET;
-    address->sin_port = htons(port); // convert port number to big endian
-
-    if (strlen(ip) == 0) {
-        address->sin_addr.s_addr = INADDR_ANY; // listen to any incoming address
-    } else {
-        int ptonResult = inet_pton(AF_INET, ip, &address->sin_addr.s_addr); // presentation to network (parse ip string to int32 ip)
-        if (ptonResult != 1) {
-            perror("error presenting to network\n");
-            free(address);
-
-            return NULL;
-        }
-    }
-
-    return address;
-}
-
-AcceptedSocket* acceptIncomingConnection(int serverSocketFD) {
-    struct sockaddr_in clientAddress;
-    int clientAddressLength = sizeof(clientAddress);
-    int clientSocketFD = accept(serverSocketFD, (struct sockaddr*)&clientAddress, (socklen_t*)&clientAddressLength);
-
-    AcceptedSocket * acceptedSocket = malloc(sizeof(AcceptedSocket));
-    acceptedSocket->acceptedSocketFD = clientSocketFD;
-    acceptedSocket->address = clientAddress;
-    acceptedSocket->acceptedSuccessfully = clientSocketFD > 0;
-    if (clientSocketFD <= 0)
-        acceptedSocket->error = clientSocketFD;
-
-    return acceptedSocket;
-}
-
-void startAcceptingIncomingConnections(int serverSocketFD, int semaphoreID) {
-    while (true) {
-        PSemaphore(semaphoreID);
-        // Critic Region
-        AcceptedSocket* acceptedSocket = acceptIncomingConnection(serverSocketFD);
-        if (!acceptedSocket->acceptedSuccessfully) {
-            free(acceptedSocket);
-            perror("[!] error while accepting incoming connection \n");
-
-            break;
-        }
-
-        void* argumentsToProcessSocket[2] = {acceptedSocket, &semaphoreID};
-        pthread_t id;
-        pthread_create(&id, NULL, processSocketRequests, argumentsToProcessSocket);
-
-        char connectionIP[16];
-        inet_ntop(AF_INET, &acceptedSocket->address.sin_addr, connectionIP, 16);
-        printf("[+] new connection accepted with fd: %d and address: %s. Sent to thread: %lu\n", acceptedSocket->acceptedSocketFD, connectionIP, (unsigned long) id);
-    }
-}
-
-void* processSocketRequests(void* args) {
+void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore) {
     char buffer[1024];
-
-    void* acceptedSocket = ((void**)args)[0];
-    int connectionSemaphore = *((int*)(((void**)args)[1]));
-
-    int acceptedSocketFD = ((AcceptedSocket*)acceptedSocket)->acceptedSocketFD;
-    free(acceptedSocket);
 
     while (true) {
         ssize_t amountReceived = recv(acceptedSocketFD, buffer, sizeof(buffer), 0);
