@@ -3,7 +3,10 @@ project(sisop-sockets-server C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(server main.c)
+add_executable(server main.c
+        semaphores.h
+        semaphores.c
+)
 
 # get and import .h files path in MacOS to enable auto import by CLion
 execute_process(
