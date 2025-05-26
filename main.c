@@ -33,7 +33,7 @@ void VSemaphore(int semaphoreID);
 void singleOperationSemaphore(int semaphoreID, short operation);
 
 #define LISTEN_BACKLOG 128
-#define MAX_CONNECTIONS 1
+#define MAX_CONNECTIONS 5
 #define PORT 2000
 #define IP ""
 
