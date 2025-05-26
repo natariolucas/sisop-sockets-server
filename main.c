@@ -7,6 +7,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
 
 typedef struct {
     int acceptedSocketFD;
@@ -15,14 +18,22 @@ typedef struct {
     int error;
 } AcceptedSocket;
 
+/* Socket */
 int createIPv4Socket();
 struct sockaddr_in* createIPv4Address(char* ip, int port);
 AcceptedSocket * acceptIncomingConnection(int serverSocketFD);
-void startAcceptingIncomingConnections(int serverSocketFD);
+void startAcceptingIncomingConnections(int serverSocketFD, int semaphoreID);
 void acceptConnectionsAndProcessRequests(int serverSocketFD);
-void* processSocketRequests(void* acceptedSocket);
+void* processSocketRequests(void* args);
 
-#define LISTEN_BACKLOG 1
+/* Semaphores */
+int createSemaphore(int initialValue);
+void PSemaphore(int semaphoreID);
+void VSemaphore(int semaphoreID);
+void singleOperationSemaphore(int semaphoreID, short operation);
+
+#define LISTEN_BACKLOG 128
+#define MAX_CONNECTIONS 1
 #define PORT 2000
 #define IP ""
 
@@ -62,7 +73,9 @@ int main() {
         return 0;
     }
 
-    startAcceptingIncomingConnections(serverSocketFD);
+    int semaphoreConnectionsID = createSemaphore(MAX_CONNECTIONS);
+
+    startAcceptingIncomingConnections(serverSocketFD, semaphoreConnectionsID);
 
     printf("[!] shutting down....");
     shutdown(serverSocketFD, SHUT_RDWR);
@@ -114,8 +127,10 @@ AcceptedSocket* acceptIncomingConnection(int serverSocketFD) {
     return acceptedSocket;
 }
 
-void startAcceptingIncomingConnections(int serverSocketFD) {
+void startAcceptingIncomingConnections(int serverSocketFD, int semaphoreID) {
     while (true) {
+        PSemaphore(semaphoreID);
+        // Critic Region
         AcceptedSocket* acceptedSocket = acceptIncomingConnection(serverSocketFD);
         if (!acceptedSocket->acceptedSuccessfully) {
             free(acceptedSocket);
@@ -124,8 +139,9 @@ void startAcceptingIncomingConnections(int serverSocketFD) {
             break;
         }
 
+        void* argumentsToProcessSocket[2] = {acceptedSocket, &semaphoreID};
         pthread_t id;
-        pthread_create(&id, NULL, processSocketRequests, acceptedSocket);
+        pthread_create(&id, NULL, processSocketRequests, argumentsToProcessSocket);
 
         char connectionIP[16];
         inet_ntop(AF_INET, &acceptedSocket->address.sin_addr, connectionIP, 16);
@@ -133,15 +149,23 @@ void startAcceptingIncomingConnections(int serverSocketFD) {
     }
 }
 
-void* processSocketRequests(void* acceptedSocket) {
+void* processSocketRequests(void* args) {
     char buffer[1024];
+
+    void* acceptedSocket = ((void**)args)[0];
+    int connectionSemaphore = *((int*)(((void**)args)[1]));
+
     int acceptedSocketFD = ((AcceptedSocket*)acceptedSocket)->acceptedSocketFD;
     free(acceptedSocket);
 
     while (true) {
         ssize_t amountReceived = recv(acceptedSocketFD, buffer, sizeof(buffer), 0);
         if (amountReceived < 0) {
-            perrror("[-] fd: %d - error while receiving data\n", acceptedSocketFD);
+            char errorMessage[1024];
+
+            sprintf(errorMessage, "[-] fd: %d - error while receiving data\n", acceptedSocketFD);
+            perror(errorMessage);
+
             break;
         }
 
@@ -158,6 +182,50 @@ void* processSocketRequests(void* acceptedSocket) {
     }
 
     close(acceptedSocketFD);
+    VSemaphore(connectionSemaphore);
 
     return NULL;
+}
+
+int createSemaphore(int initialValue) {
+    key_t key = ftok("main.c", 'E');  // create unique key
+
+    int semID = semget(key, 1, IPC_CREAT | 0666);  // create set of 1 semaphore
+    if (semID == -1) {
+        perror("[!] semget");
+        exit(1);
+    }
+
+    union semun semaphoreArguments;
+    semaphoreArguments.val = initialValue;
+    if (semctl(semID, 0, SETVAL, semaphoreArguments) == -1) {
+        perror("semctl");
+        exit(1);
+    }
+
+    return semID;
+}
+
+void PSemaphore(int semaphoreID) {
+    singleOperationSemaphore(semaphoreID, -1);
+}
+
+void VSemaphore(int semaphoreID) {
+    singleOperationSemaphore(semaphoreID, 1);
+}
+
+void singleOperationSemaphore(int semaphoreID, short operation) {
+    /*
+    * 0 is the index of semaphore set
+    * -1 means decrementing by 1
+    * 0 refers to flags
+    */
+    struct sembuf operationParams = {0, operation, 0};
+
+    // The 1 in third param means that there is only 1 operation (single operation)
+    int semResult = semop(semaphoreID, &operationParams, 1);  // Blocks if current semaphore value is 0
+    if (semResult == -1) {
+        perror("[!] semaphore operation");
+        exit(1);
+    }
 }
