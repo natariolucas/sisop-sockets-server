@@ -7,10 +7,14 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "semaphores.h"
-#include "server_socket.h"
+#include <sys/ipc.h>
+#include <sys/sem.h>
+
+#include "semaphores/semaphores.h"
+#include "server_socket/server_socket.h"
 #include "regex.h"
-#include "operations.h"
+#include "buffers/buffers.h"
+#include "operations/operations.h"
 
 #define LISTEN_BACKLOG 128
 #define MAX_CONNECTIONS 5
@@ -23,8 +27,16 @@
 #define KBLU  "\x1B[34m"
 #define KCYN  "\x1B[36m"
 
-void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore);
+void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore);
+void createBuffers();
+void releaseBuffers();
+void writeBuffer(char* operation, char operator, char* result);
 void removeAllCRLF(char* str);
+
+StringBuffer* sumBuffer;
+StringBuffer* subBuffer;
+StringBuffer* timesBuffer;
+StringBuffer* divBuffer;
 
 int main() {
     printf("%s[+] starting with IP: '%s' and PORT: %d\n", KCYN, IP, PORT);
@@ -52,7 +64,6 @@ int main() {
     }
 
     free(serverAddress);
-
     printf("%s[+] socket was bound successfully\n", KCYN);
 
     int listenResult = listen(serverSocketFD, LISTEN_BACKLOG);
@@ -62,17 +73,21 @@ int main() {
         return 0;
     }
 
+    createBuffers();
+
     int semaphoreConnectionsID = createSemaphore(MAX_CONNECTIONS);
 
-    startAcceptingIncomingConnections(serverSocketFD, semaphoreConnectionsID, processSocketRequests);
+    startAcceptingIncomingConnections(serverSocketFD, semaphoreConnectionsID, processSocketThreadRequests);
 
     printf("%s[!] shutting down....",KRED);
+
+    releaseBuffers();
     shutdown(serverSocketFD, SHUT_RDWR);
 
     return 0;
 }
 
-void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore) {
+void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore) {
     char request[1024];
     char response[1024];
     regex_t regex;
@@ -107,8 +122,9 @@ void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore) {
         request[amountReceived] = '\0';
 
         int regexResult;
+        char operator;
 
-        double result = getOperationResultFromRequest(&regex, request, &regexResult);
+        double result = getOperationResultFromRequest(&regex, request, &regexResult, &operator);
         switch (regexResult) {
             case 0: {
                 if (regexResult != 0) {
@@ -116,9 +132,15 @@ void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore) {
                     break;
                 }
 
-                sprintf(response, "RESULT = %.2f", result);
+                char resultStr[100];
+                sprintf(resultStr, "%.2f", result);
+
                 removeAllCRLF(request);
-                printf("%s[*] resolving expression %s with response: %s\n", KCYN, request, response);
+                printf("%s[*] resolving expression %s with result: %s\n", KCYN, request, resultStr);
+
+                writeBuffer(request, operator, resultStr);
+
+                sprintf(response, "RESULT = %s", resultStr);
 
                 break;
             }
@@ -137,6 +159,45 @@ void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore) {
     regfree(&regex);
 
     return NULL;
+}
+
+void createBuffers() {
+    sumBuffer = newBufferWithMutex(newMutex(true));
+    subBuffer = newBufferWithMutex(newMutex(true));
+    timesBuffer = newBufferWithMutex(newMutex(true));
+    divBuffer = newBufferWithMutex(newMutex(true));
+}
+
+void releaseBuffers() { // TODO: Write file?
+    freeBuffer(sumBuffer);
+    freeBuffer(subBuffer);
+    freeBuffer(timesBuffer);
+    freeBuffer(divBuffer);
+}
+
+void writeBuffer(char* operation, char operator, char* result) {
+    StringBuffer* buffer;
+    switch (operator) {
+        case '+':
+            buffer = sumBuffer;
+            break;
+        case '-':
+            buffer = subBuffer;
+            break;
+        case '*':
+            buffer = timesBuffer;
+            break;
+        case '/':
+            buffer = divBuffer;
+            break;
+        default:
+            return;
+    }
+
+    char* log = malloc(sizeof(char)*1024);
+    sprintf(log, "%s = %s \n\0", operation, result);
+
+    appendToBuffer(buffer, log);
 }
 
 void removeAllCRLF(char* str) {

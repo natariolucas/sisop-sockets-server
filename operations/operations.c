@@ -49,7 +49,7 @@ double* processOperationFromString(const char* operand1, const char operator, co
     return result;
 }
 
-double getOperationResultFromRequest(regex_t *regex, char* request, int* regexecResult) {
+double getOperationResultFromRequest(regex_t *regex, char* request, int* regexecResult, char* operator) {
     regmatch_t matches[4];
 
     *regexecResult = regexec(regex, request, 4, matches, 0);
@@ -58,12 +58,14 @@ double getOperationResultFromRequest(regex_t *regex, char* request, int* regexec
     }
 
     char *operand1 = getStringFromMatchIndex(matches, 1, request);
-    char *operator = getStringFromMatchIndex(matches, 2, request);
+    char *regexOperator = getStringFromMatchIndex(matches, 2, request);
     char *operand2 = getStringFromMatchIndex(matches, 3, request);
 
-    double* resultOperation = processOperationFromString(operand1, *operator, operand2);
+    double* resultOperation = processOperationFromString(operand1, *regexOperator, operand2);
+    *operator = *regexOperator;
+
     free(operand1);
-    free(operator);
+    free(regexOperator);
     free(operand2);
 
     if (resultOperation == NULL) {

@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <pthread/pthread.h>
 
-#include "semaphores.h"
+#include "../semaphores/semaphores.h"
 
 #define KGRN  "\x1B[32m"
 

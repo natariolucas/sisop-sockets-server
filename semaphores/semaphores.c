@@ -1,15 +1,22 @@
 #include "semaphores.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/_types/_key_t.h>
 
-int createSemaphore(int initialValue) {
-    key_t key = ftok("main.c", 'E');  // create unique key
+int newMutex(bool startsInOne) {
+    if (startsInOne) {
+        return createSemaphore(1);
+    }
 
-    int semID = semget(key, 1, IPC_CREAT | 0666);  // create set of 1 semaphore
+    return createSemaphore(0);
+}
+
+int createSemaphore(int initialValue) {
+    int semID = semget(IPC_PRIVATE, 1, IPC_CREAT | 0666);  // create set of 1 semaphore
     if (semID == -1) {
         perror("[!] semget");
         exit(1);
@@ -23,6 +30,10 @@ int createSemaphore(int initialValue) {
     }
 
     return semID;
+}
+
+void freeSemaphore(int semID) {
+    semctl(semID, 0, IPC_RMID);
 }
 
 void PSemaphore(int semaphoreID) {
