@@ -16,12 +16,18 @@
 #define PORT 2000
 #define IP ""
 
+// Colors
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KBLU  "\x1B[34m"
+#define KCYN  "\x1B[36m"
+
 void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore);
 char* getStringFromMatchIndex(regmatch_t* matches, int index, char* source);
 double* processOperationFromString(const char* operand1, char operator, const char* operand2);
 
 int main() {
-    printf("[+] starting with IP: '%s' and PORT: %d\n", IP, PORT);
+    printf("%s[+] starting with IP: '%s' and PORT: %d\n", KCYN, IP, PORT);
 
     const int serverSocketFD = createIPv4Socket();
     if (serverSocketFD == -1) {
@@ -47,7 +53,7 @@ int main() {
 
     free(serverAddress);
 
-    printf("[+] socket was bound successfully\n");
+    printf("%s[+] socket was bound successfully\n", KCYN);
 
     int listenResult = listen(serverSocketFD, LISTEN_BACKLOG);
     if (listenResult == -1) {
@@ -60,7 +66,7 @@ int main() {
 
     startAcceptingIncomingConnections(serverSocketFD, semaphoreConnectionsID, processSocketRequests);
 
-    printf("[!] shutting down....");
+    printf("%s[!] shutting down....",KRED);
     shutdown(serverSocketFD, SHUT_RDWR);
 
     return 0;
@@ -96,12 +102,11 @@ void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore) {
         }
 
         if (amountReceived == 0) {
-            printf("[-] fd: %d - socket closed\n", acceptedSocketFD);
+            printf("%s[-] fd: %d - socket closed\n", KRED, acceptedSocketFD);
             break;
         }
 
         request[amountReceived] = '\0';
-        printf("Input a regex: %s", request);
         regmatch_t matches[4];
 
         int regexResult = regexec(&regex, request, 4, matches, 0);
@@ -122,7 +127,8 @@ void* processSocketRequests(int acceptedSocketFD, int connectionSemaphore) {
                     break;
                 }
 
-                sprintf(response, "RESULT: %.2f", *result);
+                sprintf(response, "RESULT = %.2f", *result);
+                printf("%s[*] resolving expression %s%s%s with response: %s\n", KCYN, operand1,operator,operand2, response);
 
                 free(operand1);
                 free(operator);

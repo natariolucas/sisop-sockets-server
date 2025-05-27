@@ -8,6 +8,8 @@
 
 #include "semaphores.h"
 
+#define KGRN  "\x1B[32m"
+
 void* processCallback(void* args);
 
 int createIPv4Socket() {
@@ -72,7 +74,7 @@ void startAcceptingIncomingConnections(int serverSocketFD, int semaphoreID, void
 
         char connectionIP[16];
         inet_ntop(AF_INET, &acceptedSocket->address.sin_addr, connectionIP, 16);
-        printf("[+] new connection accepted with fd: %d and address: %s. Sent to thread: %lu\n", acceptedSocket->acceptedSocketFD, connectionIP, (unsigned long) id);
+        printf("%s[+] new connection accepted with fd: %d and address: %s. Sent to thread: %lu\n", KGRN, acceptedSocket->acceptedSocketFD, connectionIP, (unsigned long) id);
     }
 }
 
