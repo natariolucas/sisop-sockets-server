@@ -8,6 +8,8 @@ add_executable(server main.c
         semaphores.c
         server_socket.c
         server_socket.h
+        operations.c
+        operations.h
 )
 
 # get and import .h files path in MacOS to enable auto import by CLion
