@@ -6,6 +6,7 @@
 int createSemaphore(int initialValue);
 void PSemaphore(int semaphoreID);
 void VSemaphore(int semaphoreID);
+int GetValSemaphore(int semaphoreID);
 void singleOperationSemaphore(int semaphoreID, short operation);
 pthread_mutex_t* newMutex();
 void freeSemaphore(int semID);

@@ -45,6 +45,10 @@ void VSemaphore(int semaphoreID) {
     singleOperationSemaphore(semaphoreID, 1);
 }
 
+int GetValSemaphore(int semaphoreID) {
+    return semctl(semaphoreID, 0, GETVAL);
+}
+
 void singleOperationSemaphore(int semaphoreID, short operation) {
     /*
     * 0 is the index of semaphore set
