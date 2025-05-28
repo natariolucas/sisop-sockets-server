@@ -1,12 +1,13 @@
 #ifndef SEMAPHORES_H
 #define SEMAPHORES_H
 #include <stdbool.h>
+#include <sys/_pthread/_pthread_mutex_t.h>
 
 int createSemaphore(int initialValue);
 void PSemaphore(int semaphoreID);
 void VSemaphore(int semaphoreID);
 void singleOperationSemaphore(int semaphoreID, short operation);
-int newMutex(bool startsInOne);
+pthread_mutex_t* newMutex();
 void freeSemaphore(int semID);
 
 #endif //SEMAPHORES_H

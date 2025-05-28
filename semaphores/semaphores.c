@@ -3,16 +3,17 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread/pthread.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
+#include <sys/_pthread/_pthread_mutex_t.h>
 #include <sys/_types/_key_t.h>
 
-int newMutex(bool startsInOne) {
-    if (startsInOne) {
-        return createSemaphore(1);
-    }
+pthread_mutex_t* newMutex() {
+    pthread_mutex_t* mutex = malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_init(mutex, NULL);
 
-    return createSemaphore(0);
+    return mutex;
 }
 
 int createSemaphore(int initialValue) {

@@ -3,12 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread/pthread.h>
 
 #include "../semaphores/semaphores.h"
 
 #define DEFAULT_BUFFER_SIZE 1024
 
-StringBuffer* newBufferWithMutex(int mutex) {
+StringBuffer* newBufferWithMutex(pthread_mutex_t* mutex) {
     StringBuffer* buf = malloc(sizeof(StringBuffer));
     buf->data = malloc(sizeof(char*) * DEFAULT_BUFFER_SIZE);
     buf->count = 0;
@@ -18,7 +19,7 @@ StringBuffer* newBufferWithMutex(int mutex) {
 }
 
 void appendToBuffer(StringBuffer* buf, const char* str) {
-    PSemaphore(buf->mutex);
+    pthread_mutex_lock(buf->mutex);
     sleep(10);
 
     if (buf->count >= buf->capacity) { // TODO: Ver si aca dumpeamos al file en lugar de redimensionar
@@ -29,7 +30,7 @@ void appendToBuffer(StringBuffer* buf, const char* str) {
     buf->data[buf->count] = strdup(str);  // copia del string
     buf->count++;
 
-    VSemaphore(buf->mutex);
+    pthread_mutex_unlock(buf->mutex);
 }
 
 void freeBuffer(StringBuffer* buf) {
@@ -37,5 +38,7 @@ void freeBuffer(StringBuffer* buf) {
         free(buf->data[i]);  // liberar cada string
     }
     free(buf->data);         // liberar array de punteros
+    pthread_mutex_destroy(buf->mutex); // destroy semaforo
+    free(buf->mutex); // libera semaforo
     free(buf);               // liberar struct
 }
