@@ -56,9 +56,9 @@ AcceptedSocket* acceptIncomingConnection(int serverSocketFD) {
     return acceptedSocket;
 }
 
-void startAcceptingIncomingConnections(int serverSocketFD, int semaphoreID, void*(*callback)(int,int)) {
+void startAcceptingIncomingConnections(int serverSocketFD, int availableConnectionsSemaphore, int establishedConnectionsSemaphore, void*(*callback)(int,int)) {
     while (true) {
-        PSemaphore(semaphoreID);
+        PSemaphore(availableConnectionsSemaphore);
         // Critic Region
         AcceptedSocket* acceptedSocket = acceptIncomingConnection(serverSocketFD);
         if (!acceptedSocket->acceptedSuccessfully) {
@@ -68,7 +68,9 @@ void startAcceptingIncomingConnections(int serverSocketFD, int semaphoreID, void
             break;
         }
 
-        void* argumentsToProcessSocket[3] = {acceptedSocket, &semaphoreID, callback};
+        VSemaphore(establishedConnectionsSemaphore);
+
+        void* argumentsToProcessSocket[4] = {acceptedSocket, &availableConnectionsSemaphore, &establishedConnectionsSemaphore, callback};
         pthread_t id;
         pthread_create(&id, NULL, processCallback, argumentsToProcessSocket);
 
@@ -83,11 +85,20 @@ void* processCallback(void* args) {
     int acceptedSocketFD = ((AcceptedSocket*)acceptedSocketPointer)->acceptedSocketFD;
     free(acceptedSocketPointer);
 
-    void* connectionSemaphorePointer = ((void**)args)[1];
-    int connectionSemaphore = *(int*)connectionSemaphorePointer;
+    void* availableConnectionsSemaphorePointer = ((void**)args)[1];
+    int availableConnectionsSemaphore = *(int*)availableConnectionsSemaphorePointer;
 
-    void* callbackPointer = ((void**)args)[2];
+    void* establishedConnectionsSemaphorePointer = ((void**)args)[1];
+    int establishedConnectionsSemaphore = *(int*)establishedConnectionsSemaphorePointer;
+
+    void* callbackPointer = ((void**)args)[3];
     void*(*callback)(int, int) = callbackPointer;
 
-    return callback(acceptedSocketFD, connectionSemaphore);
+    callback(acceptedSocketFD, availableConnectionsSemaphore);
+
+    close(acceptedSocketFD);
+    VSemaphore(availableConnectionsSemaphore);
+    PSemaphore(establishedConnectionsSemaphore);
+
+    return NULL;
 }

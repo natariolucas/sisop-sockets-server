@@ -75,9 +75,10 @@ int main() {
 
     createBuffers();
 
-    int semaphoreConnectionsID = createSemaphore(MAX_CONNECTIONS);
+    int availableConnectionsSemaphore = createSemaphore(MAX_CONNECTIONS);
+    int establishedConnectionsSemaphore = createSemaphore(0);
 
-    startAcceptingIncomingConnections(serverSocketFD, semaphoreConnectionsID, processSocketThreadRequests);
+    startAcceptingIncomingConnections(serverSocketFD, availableConnectionsSemaphore, establishedConnectionsSemaphore, processSocketThreadRequests);
 
     printf("%s[!] shutting down....",KRED);
 
@@ -154,8 +155,6 @@ void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore)
         send(acceptedSocketFD, response, sizeof (response), 0);
     }
 
-    close(acceptedSocketFD);
-    VSemaphore(connectionSemaphore);
     regfree(&regex);
 
     return NULL;
