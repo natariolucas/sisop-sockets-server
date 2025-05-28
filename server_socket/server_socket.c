@@ -56,11 +56,13 @@ AcceptedSocket* acceptIncomingConnection(int serverSocketFD) {
     return acceptedSocket;
 }
 
-void startAcceptingIncomingConnections(int serverSocketFD, int availableConnectionsSemaphore, int establishedConnectionsSemaphore, void*(*callback)(int,int)) {
+void* startAcceptingIncomingConnections(void* param) {
+    StartAcceptingConnectionsParams* params = (StartAcceptingConnectionsParams*) param;
+
     while (true) {
-        PSemaphore(availableConnectionsSemaphore);
+        PSemaphore(params->availableConnectionsSemaphore);
         // Critic Region
-        AcceptedSocket* acceptedSocket = acceptIncomingConnection(serverSocketFD);
+        AcceptedSocket* acceptedSocket = acceptIncomingConnection(params->serverSocketFD);
         if (!acceptedSocket->acceptedSuccessfully) {
             free(acceptedSocket);
             perror("[!] error while accepting incoming connection \n");
@@ -68,9 +70,13 @@ void startAcceptingIncomingConnections(int serverSocketFD, int availableConnecti
             break;
         }
 
-        VSemaphore(establishedConnectionsSemaphore);
+        pthread_mutex_lock(params->establishedConnections->mutex);
+        params->establishedConnections->count += 1;
+        params->establishedConnections->firstClientConnected = true;
+        pthread_mutex_unlock(params->establishedConnections->mutex);
 
-        void* argumentsToProcessSocket[4] = {acceptedSocket, &availableConnectionsSemaphore, &establishedConnectionsSemaphore, callback};
+
+        void* argumentsToProcessSocket[4] = {acceptedSocket, &(params->availableConnectionsSemaphore), params->establishedConnections, params->callback};
         pthread_t id;
         pthread_create(&id, NULL, processCallback, argumentsToProcessSocket);
 
@@ -78,6 +84,8 @@ void startAcceptingIncomingConnections(int serverSocketFD, int availableConnecti
         inet_ntop(AF_INET, &acceptedSocket->address.sin_addr, connectionIP, 16);
         printf("%s[+] new connection accepted with fd: %d and address: %s. Sent to thread: %lu\n", KGRN, acceptedSocket->acceptedSocketFD, connectionIP, (unsigned long) id);
     }
+
+    return NULL;
 }
 
 void* processCallback(void* args) {
@@ -88,8 +96,8 @@ void* processCallback(void* args) {
     void* availableConnectionsSemaphorePointer = ((void**)args)[1];
     int availableConnectionsSemaphore = *(int*)availableConnectionsSemaphorePointer;
 
-    void* establishedConnectionsSemaphorePointer = ((void**)args)[1];
-    int establishedConnectionsSemaphore = *(int*)establishedConnectionsSemaphorePointer;
+    void* establishedConnectionsPointer = ((void**)args)[2];
+    EstablishedConnections* establishedConnections = (EstablishedConnections*)establishedConnectionsPointer;
 
     void* callbackPointer = ((void**)args)[3];
     void*(*callback)(int, int) = callbackPointer;
@@ -97,8 +105,17 @@ void* processCallback(void* args) {
     callback(acceptedSocketFD, availableConnectionsSemaphore);
 
     close(acceptedSocketFD);
-    VSemaphore(availableConnectionsSemaphore);
-    PSemaphore(establishedConnectionsSemaphore);
 
-    return NULL;
+    pthread_mutex_lock(establishedConnections->mutex);
+    establishedConnections->count -= 1;
+    if (establishedConnections->count == 0) { // Avisar que ya no hay conexiones, apagar server
+        pthread_mutex_unlock(establishedConnections->mutex);
+        pthread_cond_signal(establishedConnections->noConnectionsCond);
+
+        pthread_exit(NULL);
+    }
+    pthread_mutex_unlock(establishedConnections->mutex);
+
+    VSemaphore(availableConnectionsSemaphore);
+    pthread_exit(NULL);
 }

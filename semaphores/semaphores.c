@@ -16,6 +16,13 @@ pthread_mutex_t* newMutex() {
     return mutex;
 }
 
+pthread_cond_t* newCond() {
+    pthread_cond_t* cond = malloc(sizeof(pthread_cond_t));
+    pthread_cond_init(cond, NULL);
+
+    return cond;
+}
+
 int createSemaphore(int initialValue) {
     int semID = semget(IPC_PRIVATE, 1, IPC_CREAT | 0666);  // create set of 1 semaphore
     if (semID == -1) {

@@ -75,10 +75,31 @@ int main() {
 
     createBuffers();
 
-    int availableConnectionsSemaphore = createSemaphore(MAX_CONNECTIONS);
-    int establishedConnectionsSemaphore = createSemaphore(0);
+    pthread_mutex_t* establishedConnectionsMutex = newMutex();
+    pthread_cond_t* noConnectionsCond = newCond();
 
-    startAcceptingIncomingConnections(serverSocketFD, availableConnectionsSemaphore, establishedConnectionsSemaphore, processSocketThreadRequests);
+    StartAcceptingConnectionsParams params;
+    params.availableConnectionsSemaphore = createSemaphore(MAX_CONNECTIONS);
+    params.serverSocketFD = serverSocketFD;
+    params.callback = processSocketThreadRequests;
+
+    EstablishedConnections establishedConnections;
+    params.establishedConnections = &establishedConnections;
+    params.establishedConnections->firstClientConnected = false;
+    params.establishedConnections->count = 0;
+    params.establishedConnections->mutex = establishedConnectionsMutex;
+    params.establishedConnections->noConnectionsCond = noConnectionsCond;
+
+
+    pthread_t threadAcceptConnectionsID;
+    pthread_create(&threadAcceptConnectionsID, NULL, startAcceptingIncomingConnections, &params);
+
+    pthread_mutex_lock(params.establishedConnections->mutex);
+    while (!params.establishedConnections->firstClientConnected || (params.establishedConnections->firstClientConnected && params.establishedConnections->count > 0)) {
+        pthread_cond_wait(params.establishedConnections->noConnectionsCond, params.establishedConnections->mutex);
+    }
+
+    pthread_mutex_unlock(params.establishedConnections->mutex);
 
     printf("%s[!] shutting down....",KRED);
 
@@ -161,10 +182,10 @@ void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore)
 }
 
 void createBuffers() {
-    sumBuffer = newBufferWithMutex(newMutex(true));
-    subBuffer = newBufferWithMutex(newMutex(true));
-    timesBuffer = newBufferWithMutex(newMutex(true));
-    divBuffer = newBufferWithMutex(newMutex(true));
+    sumBuffer = newBufferWithMutex(newMutex());
+    subBuffer = newBufferWithMutex(newMutex());
+    timesBuffer = newBufferWithMutex(newMutex());
+    divBuffer = newBufferWithMutex(newMutex());
 }
 
 void releaseBuffers() { // TODO: Write file?
@@ -194,7 +215,7 @@ void writeBuffer(char* operation, char operator, char* result) {
     }
 
     char* log = malloc(sizeof(char)*1024);
-    sprintf(log, "%s = %s \n\0", operation, result);
+    sprintf(log, "%s = %s \n", operation, result);
 
     appendToBuffer(buffer, log);
 }

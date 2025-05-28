@@ -20,7 +20,7 @@ StringBuffer* newBufferWithMutex(pthread_mutex_t* mutex) {
 
 void appendToBuffer(StringBuffer* buf, const char* str) {
     pthread_mutex_lock(buf->mutex);
-    sleep(10);
+    sleep(2);
 
     if (buf->count >= buf->capacity) { // TODO: Ver si aca dumpeamos al file en lugar de redimensionar
         buf->capacity *= 2;
