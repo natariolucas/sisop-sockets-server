@@ -1,6 +1,8 @@
 #ifndef BUFFERS_H
 #define BUFFERS_H
-#include <sys/_pthread/_pthread_mutex_t.h>
+// #include <sys/_pthread/_pthread_mutex_t.h>
+#include <pthread.h>
+
 
 typedef struct {
     char** data;     // array de strings
