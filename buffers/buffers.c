@@ -1,5 +1,6 @@
 #include "buffers.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -8,6 +9,8 @@
 #include "../semaphores/semaphores.h"
 
 #define DEFAULT_BUFFER_SIZE 1024
+
+void freeStringBufferMemory(StringBuffer* stringBuffer);
 
 StringBuffer* newBufferWithMutex(pthread_mutex_t* mutex) {
     StringBuffer* buf = malloc(sizeof(StringBuffer));
@@ -33,12 +36,35 @@ void appendToBuffer(StringBuffer* buf, const char* str) {
     pthread_mutex_unlock(buf->mutex);
 }
 
-void freeBuffer(StringBuffer* buf) {
-    for (int i = 0; i < buf->count; i++) {
-        free(buf->data[i]);  // liberar cada string
+void freeBuffer(StringBuffer* stringBuffer, const char* dumpFilePath) {
+    // open file for writing
+    FILE* file = fopen(dumpFilePath, "w");
+    if (file == NULL) {
+        perror("Error al abrir el archivo para escribir");
+        freeStringBufferMemory(stringBuffer);
+
+        return;
     }
-    free(buf->data);         // liberar array de punteros
-    pthread_mutex_destroy(buf->mutex); // destroy semaforo
-    free(buf->mutex); // libera semaforo
-    free(buf);               // liberar struct
+
+    // Escribir cada string en el archivo
+    if (file != NULL) {
+        for (int i = 0; i < stringBuffer->count; i++) {
+            fprintf(file, "%s\n", stringBuffer->data[i]); // escribir string en el archivo
+        }
+
+        fclose(file);
+    }
+
+    freeStringBufferMemory(stringBuffer);
+}
+
+void freeStringBufferMemory(StringBuffer* stringBuffer) {
+    for (int i = 0; i < stringBuffer->count; i++) {
+        free(stringBuffer->data[i]);  // free each string
+    }
+
+    free(stringBuffer->data);         // free pointers array
+    pthread_mutex_destroy(stringBuffer->mutex); // destroy semaphore
+    free(stringBuffer->mutex); // free semaphore
+    free(stringBuffer);
 }

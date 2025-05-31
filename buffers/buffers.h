@@ -11,6 +11,6 @@ typedef struct {
 
 StringBuffer* newBufferWithMutex(pthread_mutex_t* mutex);
 void appendToBuffer(StringBuffer* buf, const char* str);
-void freeBuffer(StringBuffer* buf);
+void freeBuffer(StringBuffer* stringBuffer, const char* dumpFilePath);
 
 #endif //BUFFERS_H

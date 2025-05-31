@@ -27,10 +27,17 @@
 #define KBLU  "\x1B[34m"
 #define KCYN  "\x1B[36m"
 
+//resultFilePaths
+#define SUM_FILE_PATH "./sum_result.txt"
+#define SUB_FILE_PATH "./sub_result.txt"
+#define TIMES_FILE_PATH "./times_result.txt"
+#define DIV_FILE_PATH "./div_result.txt"
+
 void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore);
 void createBuffers();
 void releaseBuffers();
-void writeBuffer(char* operation, char operator, char* result);
+StringBuffer* getOperationBuffer(const char operator);
+void writeBuffer(char* operation, char* result, StringBuffer* buffer);
 void removeAllCRLF(char* str);
 
 StringBuffer* sumBuffer;
@@ -149,18 +156,21 @@ void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore)
         double result = getOperationResultFromRequest(&regex, request, &regexResult, &operator);
         switch (regexResult) {
             case 0: {
-                if (regexResult != 0) {
-                    strcpy(response, "error al procesar la operación, verifique su expresión");
+                char resultStr[100];
+                sprintf(resultStr, "%.2f", result);
+                removeAllCRLF(request);
+
+                printf("%s[*] resolved expression %s with result: %s\n", KCYN, request, resultStr);
+
+                StringBuffer* operationBuffer = getOperationBuffer(operator);
+                if (operationBuffer == NULL) {
+                    strcpy(response, "error al escribir en buffer, intente nuevamente");
                     break;
                 }
 
-                char resultStr[100];
-                sprintf(resultStr, "%.2f", result);
-
-                removeAllCRLF(request);
-                printf("%s[*] resolving expression %s with result: %s\n", KCYN, request, resultStr);
-
-                writeBuffer(request, operator, resultStr);
+                printf("%s[*] writing to buffer: %p\n", KBLU, operationBuffer);
+                writeBuffer(request, resultStr, operationBuffer);
+                printf("%s[*] wrote to buffer: %p\n", KBLU, operationBuffer);
 
                 sprintf(response, "RESULT = %s", resultStr);
 
@@ -183,19 +193,37 @@ void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore)
 
 void createBuffers() {
     sumBuffer = newBufferWithMutex(newMutex());
+    printf("%s[*] created sum buffer: %p\n", KBLU, sumBuffer);
+
     subBuffer = newBufferWithMutex(newMutex());
+    printf("%s[*] created sub buffer: %p\n", KBLU, subBuffer);
+
     timesBuffer = newBufferWithMutex(newMutex());
+    printf("%s[*] created times buffer: %p\n", KBLU, timesBuffer);
+
     divBuffer = newBufferWithMutex(newMutex());
+    printf("%s[*] created div buffer: %p\n", KBLU, divBuffer);
+
 }
 
-void releaseBuffers() { // TODO: Write file?
-    freeBuffer(sumBuffer);
-    freeBuffer(subBuffer);
-    freeBuffer(timesBuffer);
-    freeBuffer(divBuffer);
+void releaseBuffers() {
+    StringBuffer* resultsBuffers[4] = {sumBuffer, subBuffer, timesBuffer, divBuffer};
+    char* resultsPaths[4] = {SUM_FILE_PATH, SUB_FILE_PATH, TIMES_FILE_PATH, DIV_FILE_PATH};
+
+    for (int i = 0; i < 4; i++) {
+        pthread_mutex_lock(resultsBuffers[i]->mutex); // it won't be unlocked because it is destroyed
+        freeBuffer(resultsBuffers[i], resultsPaths[i]);
+    }
 }
 
-void writeBuffer(char* operation, char operator, char* result) {
+void writeBuffer(char* operation, char* result, StringBuffer* buffer) {
+    char* log = malloc(sizeof(char)*1024);
+    sprintf(log, "%s = %s \n", operation, result);
+
+    appendToBuffer(buffer, log);
+}
+
+StringBuffer* getOperationBuffer(const char operator) {
     StringBuffer* buffer;
     switch (operator) {
         case '+':
@@ -211,13 +239,10 @@ void writeBuffer(char* operation, char operator, char* result) {
             buffer = divBuffer;
             break;
         default:
-            return;
+            return NULL;
     }
 
-    char* log = malloc(sizeof(char)*1024);
-    sprintf(log, "%s = %s \n", operation, result);
-
-    appendToBuffer(buffer, log);
+    return buffer;
 }
 
 void removeAllCRLF(char* str) {
