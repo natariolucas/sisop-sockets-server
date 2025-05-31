@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread/pthread.h>
+// #include <pthread/pthread.h>
+#include <pthread.h>
+
 
 #include "../semaphores/semaphores.h"
 
