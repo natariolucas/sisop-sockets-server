@@ -10,6 +10,8 @@
 
 #define DEFAULT_BUFFER_SIZE 1024
 
+#define DEBUG_BUFFER_SLEEP 0
+
 void freeStringBufferMemory(StringBuffer* stringBuffer);
 
 StringBuffer* newBufferWithMutex(pthread_mutex_t* mutex) {
@@ -23,7 +25,7 @@ StringBuffer* newBufferWithMutex(pthread_mutex_t* mutex) {
 
 void appendToBuffer(StringBuffer* buf, const char* str) {
     pthread_mutex_lock(buf->mutex);
-    sleep(2);
+    sleep(DEBUG_BUFFER_SLEEP);
 
     if (buf->count >= buf->capacity) { // TODO: Ver si aca dumpeamos al file en lugar de redimensionar
         buf->capacity *= 2;
