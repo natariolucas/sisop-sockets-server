@@ -16,8 +16,8 @@
 #include "buffers/buffers.h"
 #include "operations/operations.h"
 
-#define LISTEN_BACKLOG 128
-#define MAX_CONNECTIONS 5
+#define LISTEN_BACKLOG 1
+#define MAX_CONNECTIONS 3
 #define PORT 2000
 #define IP ""
 
