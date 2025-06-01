@@ -1,7 +1,5 @@
 # Compilación
 ## Requisitos
-- **CMake** *(Para generar Makefile)*
-- Compilador **GCC** 
 ### Cmake
 - Para MacOS: `brew install cmake`
 - Para Linux (Ubuntu) : `sudo apt install cmake`
