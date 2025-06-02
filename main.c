@@ -207,6 +207,10 @@ void handleShutdown(const int serverSocketFD, int availableConnectionsSemaphore,
     shutdown(serverSocketFD, SHUT_RDWR);
     close(serverSocketFD);
 
+    printf("%s[!] waiting accept connections thread to finish...\n", KRED);
+    pthread_join(threadAcceptConnectionsID, NULL);
+    printf("%s[!] accept connections thread finished\n", KGRN);
+
     printf("%s[!] destroying available connections semaphore\n",KRED);
     destroySemaphore(availableConnectionsSemaphore);
 
@@ -215,10 +219,6 @@ void handleShutdown(const int serverSocketFD, int availableConnectionsSemaphore,
 
     printf("%s[!] destroying no connections condition\n",KRED);
     destroyCond(noConnectionsCond);
-
-    printf("%s[!] waiting accept connections thread to finish...\n", KRED);
-    pthread_join(threadAcceptConnectionsID, NULL);
-    printf("%s[!] accept connections thread finished\n", KGRN);
 
     printf("%s[!] shutting down....\n",KRED);
 }
