@@ -143,13 +143,10 @@ void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore)
         return NULL;
     }
 
-    while (allowRunning && true) {
+    while (allowRunning) {
         ssize_t amountReceived = recv(acceptedSocketFD, request, sizeof(request), 0);
         if (amountReceived < 0) {
-            char errorMessage[1024];
-
-            sprintf(errorMessage, "[-] fd: %d - error while receiving data\n", acceptedSocketFD);
-            perror(errorMessage);
+            printf("%s[!] aborted receiving in socket %d, socket closed\n",KRED, acceptedSocketFD);
 
             break;
         }
@@ -207,8 +204,8 @@ void handleShutdown(const int serverSocketFD, int availableConnectionsSemaphore,
     releaseBuffers();
 
     printf("%s[!] closing socket\n", KRED);
-    close(serverSocketFD);
     shutdown(serverSocketFD, SHUT_RDWR);
+    close(serverSocketFD);
 
     printf("%s[!] destroying available connections semaphore\n",KRED);
     destroySemaphore(availableConnectionsSemaphore);

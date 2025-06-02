@@ -19,7 +19,8 @@
 #define MAX_CONNECTIONS_SUPPORT 100
 
 typedef struct {
-    pthread_t threads[MAX_CONNECTIONS_SUPPORT];
+    pthread_t* threads[MAX_CONNECTIONS_SUPPORT];
+    int clientSocketFD[MAX_CONNECTIONS_SUPPORT];
     pthread_mutex_t* mutex;
 } ActiveThreads;
 
@@ -80,6 +81,7 @@ void* startAcceptingIncomingConnections(void* param) {
     activeThreads.mutex = newMutex();
     for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
         activeThreads.threads[i] = NULL;
+        activeThreads.clientSocketFD[i] = 0;
     }
 
     while (true) {
@@ -93,14 +95,22 @@ void* startAcceptingIncomingConnections(void* param) {
             pthread_mutex_lock(activeThreads.mutex);
             for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
                 if (activeThreads.threads[i] != NULL) {
-                    printf("%s[*] accepting connections threads joined thread %p before finishing.\n[*]Waiting thread to finish...\n",KCYN, activeThreads.threads[i]);
-                    pthread_join(activeThreads.threads[i], NULL);
+                    send(activeThreads.clientSocketFD[i], '\0', 0, 0);
+
+                    shutdown(activeThreads.clientSocketFD[i], SHUT_RDWR);
+                    close(activeThreads.clientSocketFD[i]);
+                    printf("%s[*] Closed client connection socket %d.\n",KCYN, activeThreads.clientSocketFD[i]);
+
+                    pthread_t activeThreadToJoin = *activeThreads.threads[i];
+                    pthread_mutex_unlock(activeThreads.mutex);
+
+                    printf("%s[*]Waiting thread to finish...\n",KCYN);
+                    pthread_join(activeThreadToJoin, NULL);
                 }
             }
 
             printf("%s[*] every socket active thread finished \n",KGRN);
 
-            pthread_mutex_destroy(activeThreads.mutex);
 
             break;
         }
@@ -110,7 +120,8 @@ void* startAcceptingIncomingConnections(void* param) {
         pthread_t id;
         for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
             if (activeThreads.threads[i] == NULL) {
-                activeThreads.threads[i] = id;
+                activeThreads.threads[i] = &id;
+                activeThreads.clientSocketFD[i] = acceptedSocket->acceptedSocketFD;
                 break;
             }
         }
@@ -126,7 +137,7 @@ void* startAcceptingIncomingConnections(void* param) {
 
         char connectionIP[16];
         inet_ntop(AF_INET, &acceptedSocket->address.sin_addr, connectionIP, 16);
-        printf("%s[+] new connection accepted with fd: %d and address: %s. Sent to thread: %lu\n", KGRN, acceptedSocket->acceptedSocketFD, connectionIP, (unsigned long) id);
+        printf("%s[+] new connection accepted with fd: %d and address: %s. Sent to thread: %p\n", KGRN, acceptedSocket->acceptedSocketFD, connectionIP, id);
     }
 
     return NULL;
@@ -167,9 +178,10 @@ void* processCallback(void* args) {
 
     // Liberar ID de hilos activos
     for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
-        if (pthread_equal(activeThreads->threads[i], pthread_self())) {
+        if (pthread_equal(*activeThreads->threads[i], pthread_self())) {
             printf("%s[*]Liberando hilo activo %p", KBLU, pthread_self());
             activeThreads->threads[i] = NULL;
+            activeThreads->clientSocketFD[i] = 0;
         }
     }
 
