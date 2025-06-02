@@ -7,8 +7,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <sys/ipc.h>
-#include <sys/sem.h>
+#include <sys/stat.h>
 
 #include "semaphores/semaphores.h"
 #include "server_socket/server_socket.h"
@@ -28,10 +27,11 @@
 #define KCYN  "\x1B[36m"
 
 //resultFilePaths
-#define SUM_FILE_PATH "./sum_result.txt"
-#define SUB_FILE_PATH "./sub_result.txt"
-#define TIMES_FILE_PATH "./times_result.txt"
-#define DIV_FILE_PATH "./div_result.txt"
+#define BASE_RESULTS_DIR "./results/"
+#define SUM_FILE_PATH "./results/sums.txt"
+#define SUB_FILE_PATH "./results/subs.txt"
+#define TIMES_FILE_PATH "./results/times.txt"
+#define DIV_FILE_PATH "./results/divs.txt"
 
 void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore);
 void createBuffers();
@@ -39,6 +39,7 @@ void releaseBuffers();
 StringBuffer* getOperationBuffer(const char operator);
 void writeBuffer(char* operation, char* result, StringBuffer* buffer);
 void removeAllCRLF(char* str);
+void createDirectories(const char *path);
 
 StringBuffer* sumBuffer;
 StringBuffer* subBuffer;
@@ -207,6 +208,8 @@ void createBuffers() {
 }
 
 void releaseBuffers() {
+    createDirectories(BASE_RESULTS_DIR);
+
     StringBuffer* resultsBuffers[4] = {sumBuffer, subBuffer, timesBuffer, divBuffer};
     char* resultsPaths[4] = {SUM_FILE_PATH, SUB_FILE_PATH, TIMES_FILE_PATH, DIV_FILE_PATH};
 
@@ -254,4 +257,24 @@ void removeAllCRLF(char* str) {
         i++;
     }
     str[j] = '\0';
+}
+
+void createDirectories(const char *path) {
+    char tmp[512];
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    len = strlen(tmp);
+    if (tmp[len - 1] == '/')
+        tmp[len - 1] = 0;
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(tmp, 0755); // Ignora si ya existe
+            *p = '/';
+        }
+    }
+    mkdir(tmp, 0755);
 }
