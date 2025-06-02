@@ -33,6 +33,10 @@
 #define TIMES_FILE_PATH "./results/times.txt"
 #define DIV_FILE_PATH "./results/divs.txt"
 
+void handleSIGINT(int signal);
+void handleShutdown(const int serverSocketFD, int availableConnectionsSemaphore,
+                    pthread_t threadAcceptConnectionsID, pthread_mutex_t *establishedConnectionsMutex, pthread_cond_t *noConnectionsCond);
+
 void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore);
 void createBuffers();
 void releaseBuffers();
@@ -41,12 +45,16 @@ void writeBuffer(char* operation, char* result, StringBuffer* buffer);
 void removeAllCRLF(char* str);
 void createDirectories(const char *path);
 
+volatile sig_atomic_t allowRunning = 1;
+
 StringBuffer* sumBuffer;
 StringBuffer* subBuffer;
 StringBuffer* timesBuffer;
 StringBuffer* divBuffer;
 
 int main() {
+    signal(SIGINT, handleSIGINT);
+
     printf("%s[+] starting with IP: '%s' and PORT: %d\n", KCYN, IP, PORT);
 
     const int serverSocketFD = createIPv4Socket();
@@ -103,16 +111,18 @@ int main() {
     pthread_create(&threadAcceptConnectionsID, NULL, startAcceptingIncomingConnections, &params);
 
     pthread_mutex_lock(params.establishedConnections->mutex);
-    while (!params.establishedConnections->firstClientConnected || (params.establishedConnections->firstClientConnected && params.establishedConnections->count > 0)) {
+    while (
+        allowRunning &&
+            (
+                !params.establishedConnections->firstClientConnected ||
+                (params.establishedConnections->firstClientConnected && params.establishedConnections->count > 0)
+            )
+        ) {
         pthread_cond_wait(params.establishedConnections->noConnectionsCond, params.establishedConnections->mutex);
     }
-
     pthread_mutex_unlock(params.establishedConnections->mutex);
 
-    printf("%s[!] shutting down....",KRED);
-
-    releaseBuffers();
-    shutdown(serverSocketFD, SHUT_RDWR);
+    handleShutdown(serverSocketFD, params.availableConnectionsSemaphore, threadAcceptConnectionsID, params.establishedConnections->mutex, params.establishedConnections->noConnectionsCond);
 
     return 0;
 }
@@ -133,7 +143,7 @@ void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore)
         return NULL;
     }
 
-    while (true) {
+    while (allowRunning && true) {
         ssize_t amountReceived = recv(acceptedSocketFD, request, sizeof(request), 0);
         if (amountReceived < 0) {
             char errorMessage[1024];
@@ -192,6 +202,30 @@ void* processSocketThreadRequests(int acceptedSocketFD, int connectionSemaphore)
     return NULL;
 }
 
+void handleShutdown(const int serverSocketFD, int availableConnectionsSemaphore,
+                    pthread_t threadAcceptConnectionsID, pthread_mutex_t *establishedConnectionsMutex, pthread_cond_t *noConnectionsCond) {
+    releaseBuffers();
+
+    printf("%s[!] closing socket\n", KRED);
+    close(serverSocketFD);
+    shutdown(serverSocketFD, SHUT_RDWR);
+
+    printf("%s[!] destroying available connections semaphore\n",KRED);
+    destroySemaphore(availableConnectionsSemaphore);
+
+    printf("%s[!] destroying established connections mutex\n",KRED);
+    destroyMutex(establishedConnectionsMutex);
+
+    printf("%s[!] destroying no connections condition\n",KRED);
+    destroyCond(noConnectionsCond);
+
+    printf("%s[!] waiting accept connections thread to finish...\n", KRED);
+    pthread_join(threadAcceptConnectionsID, NULL);
+    printf("%s[!] accept connections thread finished\n", KGRN);
+
+    printf("%s[!] shutting down....\n",KRED);
+}
+
 void createBuffers() {
     sumBuffer = newBufferWithMutex(newMutex());
     printf("%s[*] created sum buffer: %p\n", KBLU, sumBuffer);
@@ -214,6 +248,7 @@ void releaseBuffers() {
     char* resultsPaths[4] = {SUM_FILE_PATH, SUB_FILE_PATH, TIMES_FILE_PATH, DIV_FILE_PATH};
 
     for (int i = 0; i < 4; i++) {
+        printf("%s[!] destroying buffer %p\n",KRED, resultsBuffers[i]);
         pthread_mutex_lock(resultsBuffers[i]->mutex); // it won't be unlocked because it is destroyed
         freeBuffer(resultsBuffers[i], resultsPaths[i]);
     }
@@ -277,4 +312,9 @@ void createDirectories(const char *path) {
         }
     }
     mkdir(tmp, 0755);
+}
+
+void handleSIGINT(int signal) {
+    printf("%s[!!!] Unexpected end of process - Handling SIGINT \n", KRED);
+    allowRunning = 0;
 }

@@ -68,3 +68,18 @@ void singleOperationSemaphore(int semaphoreID, short operation) {
         exit(1);
     }
 }
+
+void destroySemaphore(int semID) {
+    if (semctl(semID, 0, IPC_RMID) == -1) {
+        perror("[!] Error al eliminar el semáforo");
+        exit(1);
+    }
+}
+
+void destroyMutex(pthread_mutex_t* mutex) {
+    pthread_mutex_destroy(mutex);
+}
+
+void destroyCond(pthread_cond_t* cond) {
+    pthread_cond_destroy(cond);
+}

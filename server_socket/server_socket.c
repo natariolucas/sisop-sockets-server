@@ -10,7 +10,18 @@
 
 #include "../semaphores/semaphores.h"
 
+// Colors
+#define KRED  "\x1B[31m"
 #define KGRN  "\x1B[32m"
+#define KBLU  "\x1B[34m"
+#define KCYN  "\x1B[36m"
+
+#define MAX_CONNECTIONS_SUPPORT 100
+
+typedef struct {
+    pthread_t threads[MAX_CONNECTIONS_SUPPORT];
+    pthread_mutex_t* mutex;
+} ActiveThreads;
 
 void* processCallback(void* args);
 
@@ -60,6 +71,16 @@ AcceptedSocket* acceptIncomingConnection(int serverSocketFD) {
 
 void* startAcceptingIncomingConnections(void* param) {
     StartAcceptingConnectionsParams* params = (StartAcceptingConnectionsParams*) param;
+    if (GetValSemaphore(params->availableConnectionsSemaphore) > MAX_CONNECTIONS_SUPPORT) {
+        perror("max available connections above max connections support");
+        return NULL;
+    }
+
+    ActiveThreads activeThreads;
+    activeThreads.mutex = newMutex();
+    for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
+        activeThreads.threads[i] = NULL;
+    }
 
     while (true) {
         PSemaphore(params->availableConnectionsSemaphore);
@@ -67,19 +88,40 @@ void* startAcceptingIncomingConnections(void* param) {
         AcceptedSocket* acceptedSocket = acceptIncomingConnection(params->serverSocketFD);
         if (!acceptedSocket->acceptedSuccessfully) {
             free(acceptedSocket);
-            perror("[!] error while accepting incoming connection \n");
+            printf("%s[!] accept connections interrupted, socket closed \n",KRED);
+
+            pthread_mutex_lock(activeThreads.mutex);
+            for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
+                if (activeThreads.threads[i] != NULL) {
+                    printf("%s[*] accepting connections threads joined thread %p before finishing.\n[*]Waiting thread to finish...\n",KCYN, activeThreads.threads[i]);
+                    pthread_join(activeThreads.threads[i], NULL);
+                }
+            }
+
+            printf("%s[*] every socket active thread finished \n",KGRN);
+
+            pthread_mutex_destroy(activeThreads.mutex);
 
             break;
         }
 
         pthread_mutex_lock(params->establishedConnections->mutex);
+        pthread_mutex_lock(activeThreads.mutex);
+        pthread_t id;
+        for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
+            if (activeThreads.threads[i] == NULL) {
+                activeThreads.threads[i] = id;
+                break;
+            }
+        }
+
         params->establishedConnections->count += 1;
         params->establishedConnections->firstClientConnected = true;
+        pthread_mutex_unlock(activeThreads.mutex);
         pthread_mutex_unlock(params->establishedConnections->mutex);
 
 
-        void* argumentsToProcessSocket[4] = {acceptedSocket, &(params->availableConnectionsSemaphore), params->establishedConnections, params->callback};
-        pthread_t id;
+        void* argumentsToProcessSocket[5] = {acceptedSocket, &(params->availableConnectionsSemaphore), params->establishedConnections, params->callback, &activeThreads};
         pthread_create(&id, NULL, processCallback, argumentsToProcessSocket);
 
         char connectionIP[16];
@@ -104,11 +146,17 @@ void* processCallback(void* args) {
     void* callbackPointer = ((void**)args)[3];
     void*(*callback)(int, int) = callbackPointer;
 
+    void* activeThreadsPointer = ((void**)args)[4];
+    ActiveThreads* activeThreads = (ActiveThreads*)activeThreadsPointer;
+
     callback(acceptedSocketFD, availableConnectionsSemaphore);
 
     close(acceptedSocketFD);
 
     pthread_mutex_lock(establishedConnections->mutex);
+    pthread_mutex_lock(activeThreads->mutex);
+
+    // Liberar conexiones establecidas
     establishedConnections->count -= 1;
     if (establishedConnections->count == 0) { // Avisar que ya no hay conexiones, apagar server
         pthread_mutex_unlock(establishedConnections->mutex);
@@ -116,8 +164,18 @@ void* processCallback(void* args) {
 
         pthread_exit(NULL);
     }
-    pthread_mutex_unlock(establishedConnections->mutex);
+
+    // Liberar ID de hilos activos
+    for (int i = 0; i < MAX_CONNECTIONS_SUPPORT; i++) {
+        if (pthread_equal(activeThreads->threads[i], pthread_self())) {
+            printf("%s[*]Liberando hilo activo %p", KBLU, pthread_self());
+            activeThreads->threads[i] = NULL;
+        }
+    }
 
     VSemaphore(availableConnectionsSemaphore);
+    pthread_mutex_unlock(establishedConnections->mutex);
+    pthread_mutex_unlock(activeThreads->mutex);
+
     pthread_exit(NULL);
 }

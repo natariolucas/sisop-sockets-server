@@ -10,8 +10,8 @@
 #include "../semaphores/semaphores.h"
 
 #define DEFAULT_BUFFER_SIZE 1024
-
 #define DEBUG_BUFFER_SLEEP 0
+#define KGRN  "\x1B[32m"
 
 void freeStringBufferMemory(StringBuffer* stringBuffer);
 
@@ -57,6 +57,8 @@ void freeBuffer(StringBuffer* stringBuffer, const char* dumpFilePath) {
 
         fclose(file);
     }
+
+    printf("%s[*] buffer %p dump to file successfully\n", KGRN, stringBuffer);
 
     freeStringBufferMemory(stringBuffer);
 }
