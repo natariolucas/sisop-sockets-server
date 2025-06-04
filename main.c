@@ -219,12 +219,12 @@ void handleShutdown(const int serverSocketFD, int availableConnectionsSemaphore,
     shutdown(serverSocketFD, SHUT_RDWR);
     close(serverSocketFD);
 
+    printf("%s[!] destroying available connections semaphore\n",KRED);
+    destroySemaphore(availableConnectionsSemaphore);
+
     printf("%s[!] waiting accept connections thread to finish...\n", KRED);
     pthread_join(threadAcceptConnectionsID, NULL);
     printf("%s[!] accept connections thread finished\n", KGRN);
-
-    printf("%s[!] destroying available connections semaphore\n",KRED);
-    destroySemaphore(availableConnectionsSemaphore);
 
     printf("%s[!] destroying established connections mutex\n",KRED);
     destroyMutex(establishedConnectionsMutex);
