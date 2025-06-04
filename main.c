@@ -127,10 +127,10 @@ int main() {
         int rc = pthread_cond_timedwait(params.establishedConnections->noConnectionsCond,
                                          params.establishedConnections->mutex, &ts);
 
-        if (rc == ETIMEDOUT) {
+        //if (rc == ETIMEDOUT) {
             // Si se alcanza el tiempo máximo sin que llegue una señal, podemos hacer algo aquí
-            printf("Timeout: no se alcanzó la condición de cierre de server en 1 segundo,  verificando cierre brusco.\n");
-        }
+            //printf("Timeout: no se alcanzó la condición de cierre de server en 1 segundo,  verificando cierre brusco.\n");
+        //}
     }
     pthread_mutex_unlock(params.establishedConnections->mutex);
 
