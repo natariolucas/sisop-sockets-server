@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define OPERATIONS_REGEX_RULE "^([+-]?[0-9]+)[ ]*([+*/-])[ ]*([+-]?[0-9]+)[\r\n]*$"
+//Sin decimales #define OPERATIONS_REGEX_RULE "^([+-]?[0-9]+)[ ]*([+*/-])[ ]*([+-]?[0-9]+)[\r\n]*$"
+#define OPERATIONS_REGEX_RULE "^([+-]?[0-9]+\\.?[0-9]*)[ ]*([+*/-])[ ]*([+-]?[0-9]+\\.?[0-9]*)[\r\n]*$"
+
 
 int compileRegexOperations(regex_t *regex) {
     return regcomp(regex, OPERATIONS_REGEX_RULE, REG_EXTENDED);
