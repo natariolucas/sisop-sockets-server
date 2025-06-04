@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
+#include <asm-generic/errno.h>
 #include <sys/stat.h>
 
 #include "semaphores/semaphores.h"
@@ -111,14 +113,24 @@ int main() {
     pthread_create(&threadAcceptConnectionsID, NULL, startAcceptingIncomingConnections, &params);
 
     pthread_mutex_lock(params.establishedConnections->mutex);
-    while (
-        allowRunning &&
-            (
-                !params.establishedConnections->firstClientConnected ||
-                (params.establishedConnections->firstClientConnected && params.establishedConnections->count > 0)
-            )
-        ) {
-        pthread_cond_wait(params.establishedConnections->noConnectionsCond, params.establishedConnections->mutex);
+    while (allowRunning &&
+        (
+            !params.establishedConnections->firstClientConnected ||
+            (params.establishedConnections->firstClientConnected && params.establishedConnections->count > 0)
+        )) {
+
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);  // Obtener tiempo actual
+        ts.tv_sec += 1;  // Incrementar el tiempo por 1 segundo
+
+        // Usar pthread_cond_timedwait con el timeout de 1 segundo
+        int rc = pthread_cond_timedwait(params.establishedConnections->noConnectionsCond,
+                                         params.establishedConnections->mutex, &ts);
+
+        if (rc == ETIMEDOUT) {
+            // Si se alcanza el tiempo máximo sin que llegue una señal, podemos hacer algo aquí
+            printf("Timeout: no se alcanzó la condición de cierre de server en 1 segundo,  verificando cierre brusco.\n");
+        }
     }
     pthread_mutex_unlock(params.establishedConnections->mutex);
 
